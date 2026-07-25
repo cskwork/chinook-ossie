@@ -1,0 +1,17 @@
+Chinook Semantic Models
+Copyright 2026 The chinook-ossie authors
+
+This product includes software developed at
+The Apache Software Foundation (https://www.apache.org/).
+
+The following files are vendored copies of Apache Ossie (incubating) sources,
+licensed under the Apache License, Version 2.0:
+
+  schema/osi-schema.json   from apache/ossie core-spec/osi-schema.json
+  scripts/validate.py      from apache/ossie validation/validate.py
+
+Upstream ref main (07d1db73f506f92b1ba7baaafa1cc66e642a4485), vendored 2026-07-26.
+See schema/SOURCE.md.
+
+Apache Ossie is an effort undergoing incubation at The Apache Software
+Foundation (ASF). Incubation is required of all newly accepted projects.

@@ -1,0 +1,22 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Validate all semantic models (spec compliance)
+        run: make validate
+
+      - name: Verify models against the Chinook DDL (reality)
+        run: make verify

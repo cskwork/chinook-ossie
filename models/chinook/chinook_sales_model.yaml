@@ -1,0 +1,547 @@
+# Chinook — digital music store sales and catalogue.
+#
+# Source of truth: lerocha/chinook-database, ChinookDatabase/DataSources/Chinook_PostgreSql.sql
+# Evidence:        .evidence/chinook_pg.sql (fetch with `make evidence`)
+# Verified:        yes — `make verify` checks tables, columns, datatypes and primary keys
+#                  for every dataset and every field expression below.
+# Notes:           media_type, playlist and playlist_track exist in the schema but are not
+#                  modelled — nothing in the sales questions this model answers touches them.
+---
+version: "0.2.0.dev0"
+
+semantic_model:
+  - name: chinook_sales
+    description: >-
+      Sales and catalogue model for the Chinook sample database: invoices and their
+      line items, the customers who placed them, the support rep who owns each
+      customer, and the track / album / artist / genre catalogue being sold.
+    ai_context:
+      instructions: >-
+        Revenue must be summed from invoice_line, never from invoice.total. Chinook
+        stores invoice.total as a denormalised copy of the sum of its lines, so any
+        query that joins invoice to invoice_line and sums total multiplies revenue by
+        the number of lines on the invoice. Use the net_revenue metric.
+      synonyms:
+        - music store
+        - digital media store
+      examples:
+        - Which genre earned the most revenue last year?
+        - Which support rep's customers spend the most?
+        - What is the average value of an invoice by billing country?
+
+    datasets:
+      # ---------------------------------------------------------------- sales --
+      - name: invoice
+        source: chinook.public.invoice
+        description: >-
+          One row per invoice issued to a customer. `total` is a denormalised sum of
+          the invoice's lines — see the model-level ai_context before using it.
+        primary_key:
+          - invoice_id
+        fields:
+          - name: invoice_id
+            label: Invoice ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: invoice_id
+
+          - name: customer_id
+            label: Customer ID
+            description: Foreign key to customer.
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_id
+
+          - name: invoice_date
+            label: Invoice Date
+            description: When the invoice was issued. Stored without a timezone.
+            datatype: DateTime
+            dimension:
+              is_time: true
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: invoice_date
+
+          - name: billing_country
+            label: Billing Country
+            description: >-
+              Country recorded on the invoice at purchase time. May differ from the
+              customer's current country — use this one for revenue geography.
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: billing_country
+
+          - name: billing_city
+            label: Billing City
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: billing_city
+
+          - name: invoice_total
+            label: Invoice Total
+            description: >-
+              Denormalised sum of the invoice's line amounts. Safe to sum ONLY when
+              invoice_line is not joined in.
+            datatype: Decimal
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: total
+
+      - name: invoice_line
+        source: chinook.public.invoice_line
+        description: One row per track sold on an invoice. The grain of all revenue metrics.
+        primary_key:
+          - invoice_line_id
+        fields:
+          - name: invoice_line_id
+            label: Invoice Line ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: invoice_line_id
+
+          - name: invoice_id
+            label: Invoice ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: invoice_id
+
+          - name: track_id
+            label: Track ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: track_id
+
+          - name: unit_price
+            label: Unit Price
+            description: Price charged for one unit at the time of sale, not the catalogue price today.
+            datatype: Decimal
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: unit_price
+
+          - name: quantity
+            label: Quantity
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: quantity
+
+          - name: line_amount
+            label: Line Amount
+            description: Revenue for this line — unit price times quantity.
+            datatype: Decimal
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: unit_price * quantity
+
+      # ------------------------------------------------------------- customers --
+      - name: customer
+        source: chinook.public.customer
+        description: One row per customer account.
+        primary_key:
+          - customer_id
+        fields:
+          - name: customer_id
+            label: Customer ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_id
+
+          - name: full_name
+            label: Customer
+            description: First and last name joined for display.
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: first_name || ' ' || last_name
+
+          - name: email
+            label: Email
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email
+
+          - name: country
+            label: Customer Country
+            description: >-
+              The customer's current country. For revenue by geography prefer
+              invoice.billing_country, which is fixed at purchase time.
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: country
+
+          - name: company
+            label: Company
+            description: Set only for business accounts; null for consumers.
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: company
+
+          - name: support_rep_id
+            label: Support Rep ID
+            description: Foreign key to employee — the sales support rep who owns this account.
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: support_rep_id
+
+      - name: employee
+        source: chinook.public.employee
+        description: One row per staff member. Sales support reps are the subset referenced by customer.
+        primary_key:
+          - employee_id
+        fields:
+          - name: employee_id
+            label: Employee ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: employee_id
+
+          - name: full_name
+            label: Employee
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: first_name || ' ' || last_name
+
+          - name: job_title
+            label: Title
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: title
+
+          - name: hire_date
+            label: Hire Date
+            datatype: DateTime
+            dimension:
+              is_time: true
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: hire_date
+
+      # -------------------------------------------------------------- catalogue --
+      - name: track
+        source: chinook.public.track
+        description: One row per track available in the catalogue.
+        primary_key:
+          - track_id
+        fields:
+          - name: track_id
+            label: Track ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: track_id
+
+          - name: track_name
+            label: Track
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: name
+
+          - name: album_id
+            label: Album ID
+            description: Nullable — singles and loose tracks have no album.
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: album_id
+
+          - name: genre_id
+            label: Genre ID
+            description: Nullable — not every track is classified.
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: genre_id
+
+          - name: composer
+            label: Composer
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: composer
+
+          - name: duration_seconds
+            label: Duration (s)
+            description: Track length in seconds, converted from the stored milliseconds.
+            datatype: Float
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: milliseconds / 1000.0
+
+          - name: catalogue_price
+            label: Catalogue Price
+            description: >-
+              Current list price. Historical sales must use invoice_line.unit_price,
+              which records what was actually charged.
+            datatype: Decimal
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: unit_price
+
+      - name: album
+        source: chinook.public.album
+        description: One row per album.
+        primary_key:
+          - album_id
+        fields:
+          - name: album_id
+            label: Album ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: album_id
+
+          - name: album_title
+            label: Album
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: title
+
+          - name: artist_id
+            label: Artist ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: artist_id
+
+      - name: artist
+        source: chinook.public.artist
+        description: One row per artist.
+        primary_key:
+          - artist_id
+        fields:
+          - name: artist_id
+            label: Artist ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: artist_id
+
+          - name: artist_name
+            label: Artist
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: name
+
+      - name: genre
+        source: chinook.public.genre
+        description: One row per genre.
+        primary_key:
+          - genre_id
+        fields:
+          - name: genre_id
+            label: Genre ID
+            datatype: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: genre_id
+
+          - name: genre_name
+            label: Genre
+            datatype: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: name
+
+    relationships:
+      - name: invoice_line_to_invoice
+        from: invoice_line
+        to: invoice
+        from_columns:
+          - invoice_id
+        to_columns:
+          - invoice_id
+
+      - name: invoice_line_to_track
+        from: invoice_line
+        to: track
+        from_columns:
+          - track_id
+        to_columns:
+          - track_id
+
+      - name: invoice_to_customer
+        from: invoice
+        to: customer
+        from_columns:
+          - customer_id
+        to_columns:
+          - customer_id
+
+      - name: customer_to_support_rep
+        from: customer
+        to: employee
+        from_columns:
+          - support_rep_id
+        to_columns:
+          - employee_id
+
+      - name: track_to_album
+        from: track
+        to: album
+        from_columns:
+          - album_id
+        to_columns:
+          - album_id
+
+      - name: track_to_genre
+        from: track
+        to: genre
+        from_columns:
+          - genre_id
+        to_columns:
+          - genre_id
+
+      - name: album_to_artist
+        from: album
+        to: artist
+        from_columns:
+          - artist_id
+        to_columns:
+          - artist_id
+
+    metrics:
+      - name: net_revenue
+        description: >-
+          Total revenue, summed at line grain. The single agreed definition of revenue
+          for this model.
+        datatype: Decimal
+        ai_context:
+          instructions: >-
+            Always compute revenue this way. Summing invoice.total instead looks
+            equivalent and is not: joining invoice to invoice_line and summing total
+            counts each invoice once per line, inflating revenue several-fold.
+          synonyms:
+            - revenue
+            - sales
+            - turnover
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(invoice_line.unit_price * invoice_line.quantity)
+
+      - name: tracks_sold
+        description: Number of track units sold.
+        datatype: Integer
+        ai_context:
+          synonyms:
+            - units sold
+            - volume
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(invoice_line.quantity)
+
+      - name: invoice_count
+        description: Number of distinct invoices — one purchase event each.
+        datatype: Integer
+        ai_context:
+          synonyms:
+            - orders
+            - purchases
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT invoice_line.invoice_id)
+
+      - name: purchasing_customers
+        description: Number of distinct customers who bought at least once in the selected period.
+        datatype: Integer
+        ai_context:
+          instructions: >-
+            This counts customers with purchases, not registered customers. For the
+            latter, count customer.customer_id without joining to invoices.
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT invoice.customer_id)
+
+      - name: average_invoice_value
+        description: Net revenue divided by the number of invoices.
+        datatype: Decimal
+        ai_context:
+          synonyms:
+            - average order value
+            - AOV
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: >-
+                SUM(invoice_line.unit_price * invoice_line.quantity)
+                / NULLIF(COUNT(DISTINCT invoice_line.invoice_id), 0)
+
+      - name: revenue_per_customer
+        description: Net revenue divided by the number of purchasing customers.
+        datatype: Decimal
+        ai_context:
+          synonyms:
+            - ARPU
+            - spend per customer
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: >-
+                SUM(invoice_line.unit_price * invoice_line.quantity)
+                / NULLIF(COUNT(DISTINCT invoice.customer_id), 0)
+
+      - name: catalogue_tracks
+        description: Number of distinct tracks in the catalogue, sold or not.
+        datatype: Integer
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT track.track_id)
