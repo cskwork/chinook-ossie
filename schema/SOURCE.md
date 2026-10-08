@@ -8,7 +8,7 @@ sources, vendored so that validation works standalone:
 | `schema/osi-schema.json` | `core-spec/osi-schema.json` |
 | `scripts/validate.py`    | `validation/validate.py`    |
 
-- Origin: local clone: /Users/danny/Documents/Git/AIDT/ossie
+- Origin: local clone: /Users/<user>/Documents/Git/AIDT/ossie
 - Ref: `main`
 - Commit: `07d1db73f506f92b1ba7baaafa1cc66e642a4485`
 - Vendored on: 2026-07-26
